@@ -45,9 +45,6 @@ public class Lexer {
             case ',':
                 addToken(TokenType.COMMA);
                 break;
-            case '.':
-                addToken(TokenType.DOT);
-                break;
             case '-':
                 addToken(TokenType.MINUS);
                 break;
@@ -92,8 +89,24 @@ public class Lexer {
                 while (peak() != '\n' && !isAtEnd())
                     advance();
                 break;
+            case '\"':
+                parseString('"');
+                break;
+            case '\'':
+                parseString('\'');
+                break;
+            case '.':
+                if (isDigit(peak())) {
+                    advance();  // consume the '.'
+                    parseFloat();
+                    break;
+                }
 
             default:
+                if (isDigit(current)) {
+                    parseNumber();  // could be int or float
+                    break;
+                }
                 Cp.error(line, "unexpected character '" + current + "'");
         }
     }
@@ -104,6 +117,12 @@ public class Lexer {
         return source.charAt(currentIndex);
     }
 
+    private char peakNext() {
+        if (currentIndex + 1 >= source.length())
+            return '\0';
+        return source.charAt(currentIndex+1);
+    }
+
     private boolean nextCharMatches(char expected) {
         if (isAtEnd())
             return false;
@@ -112,6 +131,60 @@ public class Lexer {
 
         currentIndex++;
         return true;
+    }
+
+    /**
+     * parse a string.
+     * @param stringChar either ' or "
+     */
+    private void parseString(char stringChar) {
+        while (peak() != stringChar && peak() != '\n' && !isAtEnd())
+            advance();
+
+        if (isAtEnd() || peak() == '\n') {
+            Cp.error(line, "Unfinished string");
+            if (peak() == '\n') {
+                advance();
+                line++;
+            }
+            return;
+        }
+
+        advance();  // closing "
+
+        //return string without the quotes
+        String value = source.substring(startIndex + 1, currentIndex - 1);
+        addToken(TokenType.STRING, value);
+
+    }
+
+    private void parseNumber() {
+        while (isDigit( peak() ))
+            advance();
+
+        if (peak() == '.' && isDigit(peakNext())) {
+            advance();  // consume the '.'
+            parseFloat();
+            return;
+        }
+
+        addToken(TokenType.INT, Integer.parseInt(source.substring(startIndex, currentIndex)));
+    }
+
+    private void parseFloat() {
+        while (isDigit(peak()))
+            advance();
+
+        if (peak() == '.') {
+            Cp.error(line, "unexpected leading '.' in float");
+            return;
+        }
+
+        addToken(TokenType.FLOAT, Double.parseDouble(source.substring(startIndex, currentIndex)));
+    }
+
+    private boolean isDigit(char character) {
+        return '0' <= character && character <= '9';
     }
 
     private void addToken(TokenType type) {
@@ -126,7 +199,7 @@ public class Lexer {
     }
 
 
-        private char advance() {
+    private char advance() {
         return source.charAt(currentIndex++);
     }
 
