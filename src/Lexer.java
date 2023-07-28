@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.HashMap;
 
 public class Lexer {
     private final String source;
@@ -7,9 +8,31 @@ public class Lexer {
     private int currentIndex = 0;
     private int line = 1;
 
+    private static final HashMap<String, TokenType> keywords;
+
+    static {
+        keywords = new HashMap<>();
+        keywords.put("and", TokenType.AND);
+        keywords.put("class", TokenType.CLASS);
+        keywords.put("else", TokenType.ELSE);
+        keywords.put("false", TokenType.FALSE);
+        keywords.put("for", TokenType.FOR);
+        keywords.put("fun", TokenType.FUN);
+        keywords.put("if", TokenType.IF);
+        keywords.put("nil", TokenType.NIL);
+        keywords.put("or", TokenType.OR);
+        keywords.put("print", TokenType.PRINT);
+        keywords.put("return", TokenType.RETURN);
+        keywords.put("super", TokenType.SUPER);
+        keywords.put("this", TokenType.THIS);
+        keywords.put("true", TokenType.TRUE);
+        keywords.put("var", TokenType.VAR);
+        keywords.put("while", TokenType.WHILE);
+    }
+
     public Lexer(String source) {
         this.source = source;
-        this.tokens = new ArrayList<Token>();
+        this.tokens = new ArrayList<>();
     }
 
     ArrayList<Token> scanTokens() {
@@ -51,6 +74,17 @@ public class Lexer {
             case '+':
                 addToken(TokenType.PLUS);
                 break;
+            case '/':
+                if (nextCharMatches('*'))
+                    multilineComment();
+                else
+                    addToken(TokenType.SLASH);
+                break;
+            case '#':
+                // comment until the end of the line
+                while (peek() != '\n' && !isAtEnd())
+                    advance();
+                break;
             case ';':
                 addToken(TokenType.SEMICOLON);
                 break;
@@ -84,11 +118,6 @@ public class Lexer {
                 else
                     addToken(TokenType.GREATER);
                 break;
-            case '#':
-                // comment until the end of the line
-                while (peak() != '\n' && !isAtEnd())
-                    advance();
-                break;
             case '\"':
                 parseString('"');
                 break;
@@ -96,7 +125,7 @@ public class Lexer {
                 parseString('\'');
                 break;
             case '.':
-                if (isDigit(peak())) {
+                if (isDigit(peek())) {
                     advance();  // consume the '.'
                     parseFloat();
                     break;
@@ -105,13 +134,51 @@ public class Lexer {
             default:
                 if (isDigit(current)) {
                     parseNumber();  // could be int or float
-                    break;
+                } else if (isAlpha(current)) {
+                    parseIdentifier();
                 }
-                Cp.error(line, "unexpected character '" + current + "'");
+                else {
+                    Cp.error(line, "unexpected character '" + current + "'");
+                }
         }
     }
 
-    private char peak() {
+    private void multilineComment() {
+        int startingLine = line;
+        while (!(peek() == '*' && peakNext() == '/') && !isAtEnd()) {
+            if (peek() == '\n')
+                line++;
+            advance();
+        }
+        if (isAtEnd()) {
+            Cp.error(startingLine, "Unfinished multiline comment.");
+            return;
+        }
+        advance();  // consume the '*'
+        advance();  // consume the '/'
+    }
+
+    private boolean isAlpha(char c) {
+        return ('a' <= c && c <= 'z') ||
+                ('A' <= c && c <= 'Z') ||
+                (c == '_');
+    }
+
+    private boolean isAlphaNumeric(char c) {
+        return isAlpha(c) || isDigit(c);
+    }
+
+    private void parseIdentifier() {
+        while (isAlphaNumeric(peek()))
+            advance();
+        String lexeme = source.substring(startIndex, currentIndex);
+        TokenType type = keywords.get(lexeme);
+        if (type == null)
+            type = TokenType.IDENTIFIER;
+        addToken(type);
+    }
+
+    private char peek() {
         if (isAtEnd())
             return '\0';
         return source.charAt(currentIndex);
@@ -138,12 +205,12 @@ public class Lexer {
      * @param stringChar either ' or "
      */
     private void parseString(char stringChar) {
-        while (peak() != stringChar && peak() != '\n' && !isAtEnd())
+        while (peek() != stringChar && peek() != '\n' && !isAtEnd())
             advance();
 
-        if (isAtEnd() || peak() == '\n') {
+        if (isAtEnd() || peek() == '\n') {
             Cp.error(line, "Unfinished string");
-            if (peak() == '\n') {
+            if (peek() == '\n') {
                 advance();
                 line++;
             }
@@ -159,10 +226,10 @@ public class Lexer {
     }
 
     private void parseNumber() {
-        while (isDigit( peak() ))
+        while (isDigit( peek() ))
             advance();
 
-        if (peak() == '.' && isDigit(peakNext())) {
+        if (peek() == '.' && isDigit(peakNext())) {
             advance();  // consume the '.'
             parseFloat();
             return;
@@ -172,10 +239,10 @@ public class Lexer {
     }
 
     private void parseFloat() {
-        while (isDigit(peak()))
+        while (isDigit(peek()))
             advance();
 
-        if (peak() == '.') {
+        if (peek() == '.') {
             Cp.error(line, "unexpected leading '.' in float");
             return;
         }
